@@ -21,6 +21,7 @@ const emailSchema = z.object({
     }
     return val;
   }),
+  rsvp_link: z.string().url().optional(),
 });
 
 
@@ -37,6 +38,7 @@ const batchEmailSchema = z.object({
   }),
   subject: z.string().max(200).optional(),
   html: z.string().optional(),
+  rsvp_links: z.array(z.string().url()).optional(),
 });
 
 module.exports = {

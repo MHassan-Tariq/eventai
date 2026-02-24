@@ -61,7 +61,7 @@ const sendBulkEmailsController = async (req, res) => {
   try {
     let emailsData = req.body.emails;
 
-    // 1. Parse 'emails' if it comes as a JSON string (typical for multipart/form-data)
+    // 1. Parse 'emails' if it comes as a JSON string
     if (typeof emailsData === 'string') {
       try {
         emailsData = JSON.parse(emailsData);
@@ -77,14 +77,11 @@ const sendBulkEmailsController = async (req, res) => {
     const physicalFiles = req.files || [];
     let globalAttachments = [];
 
-    // Parse global attachments if provided as a JSON string (typical for multipart/form-data)
     if (typeof req.body.attachments === 'string') {
       try {
-        // Try to see if it's a JSON array
         const parsed = JSON.parse(req.body.attachments);
         globalAttachments = Array.isArray(parsed) ? parsed : [parsed];
       } catch (e) {
-        // If it's not JSON, treat it as a direct URL string
         globalAttachments = [{ path: req.body.attachments }];
       }
     } else if (Array.isArray(req.body.attachments)) {
@@ -93,31 +90,32 @@ const sendBulkEmailsController = async (req, res) => {
       globalAttachments = [req.body.attachments];
     }
 
-    if ((physicalFiles.length > 0 || globalAttachments.length > 0) && Array.isArray(emailsData)) {
-      emailsData = emailsData.map(email => {
-        // Ensure email is an object (it might be a string if simple broadcast)
-        const emailObj = typeof email === 'string' ? { to: email } : email;
+    if (Array.isArray(emailsData)) {
+      emailsData = emailsData.map(email => typeof email === 'string' ? { to: email } : email);
+    }
 
-        // Ensure emailObj.attachments is an array
-        if (!emailObj.attachments) emailObj.attachments = [];
+    // 3. Handle RSVP Links
+    let rsvpLinks = req.body.rsvp_links;
+    if (typeof rsvpLinks === 'string') {
+      try { rsvpLinks = JSON.parse(rsvpLinks); } catch (e) { rsvpLinks = [rsvpLinks]; }
+    }
 
-        // Append all uploaded physical files to this email's attachments
-        const physicalAttachments = physicalFiles.map(f => ({
-          filename: f.originalname,
-          content: f.buffer,
-          contentType: f.mimetype
-        }));
-
-        emailObj.attachments = [...emailObj.attachments, ...globalAttachments, ...physicalAttachments];
-        return emailObj;
+    // Mix RSVP links into emails based on index
+    if (Array.isArray(rsvpLinks) && Array.isArray(emailsData)) {
+      emailsData = emailsData.map((email, idx) => {
+        if (rsvpLinks[idx]) {
+          return { ...email, rsvp_link: rsvpLinks[idx] };
+        }
+        return email;
       });
     }
 
-    // 3. Validate Payload (Transform strings to objects first)
+    // 4. Validate Payload
     const validation = batchEmailSchema.safeParse({
       emails: emailsData,
       subject: req.body.subject,
-      html: req.body.html
+      html: req.body.html,
+      rsvp_links: rsvpLinks
     });
 
     if (!validation.success) {
@@ -128,33 +126,45 @@ const sendBulkEmailsController = async (req, res) => {
       });
     }
 
-    // 4. Apply Global Subject and HTML to validation data
+    // 5. Build Final Emails with Attachments and Template Replacements
     const globalSubject = req.body.subject;
     const globalHtml = req.body.html;
 
-    let finalEmails = validation.data.emails.map(email => {
-      // email is now guaranteed to be an object by Zod transform
+    const finalEmails = validation.data.emails.map(email => {
+      // 1. Resolve Subject & HTML
+      let subject = email.subject || globalSubject;
+      let html = email.html || globalHtml;
+
+      // 2. Replace {{RSVP_LINK}} placeholder if rsvp_link exists
+      if (email.rsvp_link && html) {
+        html = html.replace(/{{RSVP_LINK}}/g, email.rsvp_link);
+      }
+
+      // 3. Merge Attachments
+      const emailAttachments = [...(email.attachments || []), ...globalAttachments];
+      const physicalAttachments = physicalFiles.map(f => ({
+        filename: f.originalname,
+        content: f.buffer,
+        contentType: f.mimetype
+      }));
+
       return {
         ...email,
-        subject: email.subject || globalSubject,
-        html: email.html || globalHtml
+        subject,
+        html,
+        attachments: [...emailAttachments, ...physicalAttachments],
       };
     });
 
-    // 5. Final check for missing subject/html
+    // 6. Basic Check
     for (let i = 0; i < finalEmails.length; i++) {
-      if (!finalEmails[i].subject) {
-        return res.status(400).json({ status: 'error', message: `Subject missing for email at index ${i}` });
-      }
-      if (!finalEmails[i].html) {
-        return res.status(400).json({ status: 'error', message: `HTML content missing for email at index ${i}` });
-      }
+      if (!finalEmails[i].subject) return res.status(400).json({ status: 'error', message: `Subject missing for email at index ${i}` });
+      if (!finalEmails[i].html) return res.status(400).json({ status: 'error', message: `HTML content missing for email at index ${i}` });
     }
 
-    // 6. Call Service
+    // 7. Call Service
     const results = await emailService.sendBulkEmails(finalEmails);
 
-    // 5. Respond
     return res.status(200).json({
       status: 'success',
       message: 'Bulk processing completed',

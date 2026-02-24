@@ -69,31 +69,31 @@ const sendBulkEmailsController = async (req, res) => {
       }
     }
 
-    // 2. Map physical files to email attachments
+    // 2. Map physical files to email attachments (One file for all emails)
     const physicalFiles = req.files || [];
     if (physicalFiles.length > 0 && Array.isArray(emailsData)) {
       emailsData = emailsData.map(email => {
-        if (email.attachments && Array.isArray(email.attachments)) {
-          email.attachments = email.attachments.map(att => {
-            // If it's a placeholder for a physical file
-            const matchedFile = physicalFiles.find(f => f.originalname === att.filename);
-            if (matchedFile) {
-              return {
-                ...att,
-                buffer: matchedFile.buffer,
-                contentType: matchedFile.mimetype,
-                originalname: matchedFile.originalname // For emailService mapping
-              };
-            }
-            return att;
-          });
-        }
+        // Ensure email.attachments is an array
+        if (!email.attachments) email.attachments = [];
+        
+        // Append all uploaded physical files to this email's attachments
+        const physicalAttachments = physicalFiles.map(f => ({
+          filename: f.originalname,
+          content: f.buffer,
+          contentType: f.mimetype
+        }));
+        
+        email.attachments = [...email.attachments, ...physicalAttachments];
         return email;
       });
     }
 
-    // 3. Validate Payload
-    const validation = batchEmailSchema.safeParse({ emails: emailsData });
+    // 3. Validate Payload (Transform strings to objects first)
+    const validation = batchEmailSchema.safeParse({ 
+      emails: emailsData,
+      subject: req.body.subject,
+      html: req.body.html
+    });
     
     if (!validation.success) {
       return res.status(400).json({
@@ -103,8 +103,31 @@ const sendBulkEmailsController = async (req, res) => {
       });
     }
 
-    // 4. Call Service
-    const results = await emailService.sendBulkEmails(validation.data.emails);
+    // 4. Apply Global Subject and HTML to validation data
+    const globalSubject = req.body.subject;
+    const globalHtml = req.body.html;
+
+    let finalEmails = validation.data.emails.map(email => {
+      // email is now guaranteed to be an object by Zod transform
+      return {
+        ...email,
+        subject: email.subject || globalSubject,
+        html: email.html || globalHtml
+      };
+    });
+
+    // 5. Final check for missing subject/html
+    for (let i = 0; i < finalEmails.length; i++) {
+        if (!finalEmails[i].subject) {
+            return res.status(400).json({ status: 'error', message: `Subject missing for email at index ${i}` });
+        }
+        if (!finalEmails[i].html) {
+            return res.status(400).json({ status: 'error', message: `HTML content missing for email at index ${i}` });
+        }
+    }
+
+    // 6. Call Service
+    const results = await emailService.sendBulkEmails(finalEmails);
 
     // 5. Respond
     return res.status(200).json({

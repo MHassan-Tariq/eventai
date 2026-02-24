@@ -45,14 +45,14 @@ const upload = multer({
 
 // 5. Routes
 app.post(
-  '/api/v1/send-email',
+  '/api/v1/single-email',
   emailRateLimiter,
   upload.array('attachments', 5), // Allow up to 5 files with field name 'attachments'
   sendEmailController
 );
 
 app.post(
-  '/api/v1/send-bulk',
+  '/api/v1/send-email',
   emailRateLimiter,
   upload.array('attachments', 10), // Allow up to 10 files for bulk sending
   sendBulkEmailsController

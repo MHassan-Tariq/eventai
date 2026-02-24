@@ -15,12 +15,10 @@ This document provides the necessary details to integrate with the Email Sending
 
 Since the API supports physical file uploads, you must use `FormData` in the frontend (multipart/form-data).
 
-| Field         | Type               | Required | Description                                                                                                       |
-| :------------ | :----------------- | :------- | :---------------------------------------------------------------------------------------------------------------- |
-| `to`          | `string` / `array` | Yes      | One or more recipient email addresses. Can be a comma-separated string or an array of strings.                    |
-| `subject`     | `string`           | Yes      | Subject line of the email.                                                                                        |
-| `html`        | `string`           | Yes      | HTML content of the email body.                                                                                   |
-| `attachments` | `File`             | No       | One or more files (PDF, PNG, JPG). Up to 5 files allowed. These will be sent to ALL recipients in the `to` field. |
+| `attachments` | `File` / `JSON` | No | One or more files (PDF, PNG, JPG). Up to 5 files allowed. If using JSON, you can provide `filename` and `path` (URL) or `content` (URL/Base64). Physical files remain as real attachments, while URLs are automatically converted to links in the email body. |
+
+> [!TIP]
+> **URL Attachments**: If you provide a URL in the `path` or `content` field of an attachment, the API will automatically list it as a clickable link at the bottom of the email instead of sending it as a physical attachment. This saves bandwidth and ensures the recipient doesn't have to download large files to view them.
 
 ---
 
@@ -69,9 +67,9 @@ If you want different content for each person, provide them inside the `emails` 
 
 ---
 
-### **Bulk Physical Attachments (One File to All)**
+### **Bulk Physical & URL Attachments (One to All)**
 
-Physical files uploaded via `multipart/form-data` are automatically attached to **every** email in the batch.
+Global attachments can be provided either as physical files (`attachments` field) or as a JSON string in the `attachments` field of a `multipart/form-data` request. Both will be attached to **every** email in the batch.
 
 **Simple Broadcast cURL (One File to All):**
 

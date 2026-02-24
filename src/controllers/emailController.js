@@ -24,10 +24,14 @@ const sendEmailController = async (req, res) => {
       });
     }
 
-    // 3. Call Service
+    // 3. Merge Attachments (Physical files from Multer + URL/Base64 from JSON body)
+    const bodyAttachments = validation.data.attachments || [];
+    const physicalAttachments = req.files || [];
+    
+    // 4. Call Service
     const result = await emailService.sendEmail({
       ...validation.data,
-      attachments: req.files, // Pass physical files from multer
+      attachments: [...bodyAttachments, ...physicalAttachments],
     });
 
     // 4. Respond
@@ -69,12 +73,28 @@ const sendBulkEmailsController = async (req, res) => {
       }
     }
 
-    // 2. Map physical files to email attachments (One file for all emails)
+    // 2. Map physical files and global attachments to all emails
     const physicalFiles = req.files || [];
-    if (physicalFiles.length > 0 && Array.isArray(emailsData)) {
+    let globalAttachments = [];
+    
+    // Parse global attachments if provided as a JSON string (typical for multipart/form-data)
+    if (typeof req.body.attachments === 'string') {
+      try {
+        globalAttachments = JSON.parse(req.body.attachments);
+      } catch (e) {
+        // Ignore if it's not valid JSON, it might be something else
+      }
+    } else if (Array.isArray(req.body.attachments)) {
+        globalAttachments = req.body.attachments;
+    }
+
+    if ((physicalFiles.length > 0 || globalAttachments.length > 0) && Array.isArray(emailsData)) {
       emailsData = emailsData.map(email => {
-        // Ensure email.attachments is an array
-        if (!email.attachments) email.attachments = [];
+        // Ensure email is an object (it might be a string if simple broadcast)
+        const emailObj = typeof email === 'string' ? { to: email } : email;
+        
+        // Ensure emailObj.attachments is an array
+        if (!emailObj.attachments) emailObj.attachments = [];
         
         // Append all uploaded physical files to this email's attachments
         const physicalAttachments = physicalFiles.map(f => ({
@@ -83,8 +103,8 @@ const sendBulkEmailsController = async (req, res) => {
           contentType: f.mimetype
         }));
         
-        email.attachments = [...email.attachments, ...physicalAttachments];
-        return email;
+        emailObj.attachments = [...emailObj.attachments, ...globalAttachments, ...physicalAttachments];
+        return emailObj;
       });
     }
 

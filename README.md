@@ -1,6 +1,6 @@
 # Email Sending API
 
-A production-ready REST API endpoint for sending emails securely, now supporting physical file uploads (PDF, PNG, JPG).
+Deployed at: [https://eventai-seven.vercel.app](https://eventai-seven.vercel.app)
 
 ## Features
 

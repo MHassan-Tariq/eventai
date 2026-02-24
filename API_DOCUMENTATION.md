@@ -4,7 +4,7 @@ This document provides the necessary details to integrate with the Email Sending
 
 ## 🚀 Endpoint Overview
 
-- **Base URL**: `http://localhost:3000` (Update for production)
+- **Base URL**: `https://eventai-seven.vercel.app`
 - **Endpoint**: `/api/v1/send-email`
 - **Method**: `POST`
 - **Content-Type**: `multipart/form-data`
@@ -63,11 +63,12 @@ const sendEmail = async (formData) => {
 **Note**: Use the `-F` flag to send multipart data.
 
 ```bash
-curl -X POST http://localhost:3000/api/v1/send-email \
-  -F "to=recipient@example.com" \
-  -F "subject=API Documentation Test" \
-  -F "html=<h1>It Works!</h1><p>Sent via multipart form data.</p>" \
-  -F "attachments=@/path/to/your/file.pdf"
+curl -X POST https://eventai-seven.vercel.app/api/v1/send-email \
+  -F "to=mhassantariqit@gmail.com" \
+  -F "subject=Attached Documents" \
+  -F "html=<h1>Hello</h1><p>Please find the attached files.</p>" \
+  -F "attachments=@/path/to/signature.png" \
+  -F "attachments=@/path/to/Hassan-Resume.pdf"
 ```
 
 ---

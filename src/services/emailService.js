@@ -51,11 +51,23 @@ const sendEmail = async ({ to, subject, html, attachments }) => {
     };
 
     if (attachments && attachments.length > 0) {
-      mailOptions.attachments = attachments.map(file => ({
-        filename: file.originalname,
-        content: file.buffer, // multer memoryStorage provides the file buffer
-        contentType: file.mimetype
-      }));
+      mailOptions.attachments = attachments.map(file => {
+        // Handle Multer file format
+        if (file.originalname && file.buffer) {
+          return {
+            filename: file.originalname,
+            content: file.buffer,
+            contentType: file.mimetype
+          };
+        }
+        // Handle JSON/Object format (for bulk sending)
+        return {
+          filename: file.filename,
+          content: file.content, // could be base64 string
+          path: file.path,       // could be a URL
+          contentType: file.contentType
+        };
+      });
     }
     
     const info = await mailTransporter.sendMail(mailOptions);
@@ -68,6 +80,26 @@ const sendEmail = async ({ to, subject, html, attachments }) => {
   }
 };
 
+/**
+ * Sends multiple emails in batch
+ * @param {Array} emails - Array of email objects { to, subject, html, attachments }
+ * @returns {Promise<Array>} - Array of results
+ */
+const sendBulkEmails = async (emails) => {
+  const results = [];
+  for (const emailData of emails) {
+    try {
+      const result = await sendEmail(emailData);
+      results.push({ status: 'success', to: emailData.to, messageId: result.messageId });
+    } catch (error) {
+      results.push({ status: 'error', to: emailData.to, error: error.message });
+    }
+  }
+  return results;
+};
+
 module.exports = {
   sendEmail,
+  sendBulkEmails,
 };
+

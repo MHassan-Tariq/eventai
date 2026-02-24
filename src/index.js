@@ -3,7 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-const { sendEmailController } = require('./controllers/emailController');
+const { sendEmailController, sendBulkEmailsController } = require('./controllers/emailController');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -50,6 +50,14 @@ app.post(
   upload.array('attachments', 5), // Allow up to 5 files with field name 'attachments'
   sendEmailController
 );
+
+app.post(
+  '/api/v1/send-bulk',
+  emailRateLimiter,
+  upload.array('attachments', 10), // Allow up to 10 files for bulk sending
+  sendBulkEmailsController
+);
+
 
 // Health Check
 app.get('/health', (req, res) => res.status(200).json({ status: 'ok' }));

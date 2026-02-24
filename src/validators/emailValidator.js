@@ -7,12 +7,20 @@ const emailSchema = z.object({
   ]),
   subject: z.string().max(200).optional(),
   html: z.string().optional(),
-  attachments: z.array(z.object({
-    filename: z.string(),
-    content: z.any().optional(), // Can be Base64 string or physical Buffer
-    path: z.string().optional(),    // URL or local path
-    contentType: z.string().optional()
-  })).optional(),
+  attachments: z.union([
+    z.string().url(), // Support for a single URL string
+    z.array(z.object({
+      filename: z.string().optional(),
+      content: z.any().optional(),
+      path: z.string().optional(),
+      contentType: z.string().optional()
+    }))
+  ]).optional().transform((val) => {
+    if (typeof val === 'string') {
+      return [{ path: val }];
+    }
+    return val;
+  }),
 });
 
 

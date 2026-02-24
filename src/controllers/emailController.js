@@ -15,7 +15,7 @@ const sendEmailController = async (req, res) => {
 
     // 2. Validate Payload
     const validation = emailSchema.safeParse(req.body);
-    
+
     if (!validation.success) {
       return res.status(400).json({
         status: 'error',
@@ -27,7 +27,7 @@ const sendEmailController = async (req, res) => {
     // 3. Merge Attachments (Physical files from Multer + URL/Base64 from JSON body)
     const bodyAttachments = validation.data.attachments || [];
     const physicalAttachments = req.files || [];
-    
+
     // 4. Call Service
     const result = await emailService.sendEmail({
       ...validation.data,
@@ -76,45 +76,50 @@ const sendBulkEmailsController = async (req, res) => {
     // 2. Map physical files and global attachments to all emails
     const physicalFiles = req.files || [];
     let globalAttachments = [];
-    
+
     // Parse global attachments if provided as a JSON string (typical for multipart/form-data)
     if (typeof req.body.attachments === 'string') {
       try {
-        globalAttachments = JSON.parse(req.body.attachments);
+        // Try to see if it's a JSON array
+        const parsed = JSON.parse(req.body.attachments);
+        globalAttachments = Array.isArray(parsed) ? parsed : [parsed];
       } catch (e) {
-        // Ignore if it's not valid JSON, it might be something else
+        // If it's not JSON, treat it as a direct URL string
+        globalAttachments = [{ path: req.body.attachments }];
       }
     } else if (Array.isArray(req.body.attachments)) {
-        globalAttachments = req.body.attachments;
+      globalAttachments = req.body.attachments;
+    } else if (req.body.attachments && typeof req.body.attachments === 'object') {
+      globalAttachments = [req.body.attachments];
     }
 
     if ((physicalFiles.length > 0 || globalAttachments.length > 0) && Array.isArray(emailsData)) {
       emailsData = emailsData.map(email => {
         // Ensure email is an object (it might be a string if simple broadcast)
         const emailObj = typeof email === 'string' ? { to: email } : email;
-        
+
         // Ensure emailObj.attachments is an array
         if (!emailObj.attachments) emailObj.attachments = [];
-        
+
         // Append all uploaded physical files to this email's attachments
         const physicalAttachments = physicalFiles.map(f => ({
           filename: f.originalname,
           content: f.buffer,
           contentType: f.mimetype
         }));
-        
+
         emailObj.attachments = [...emailObj.attachments, ...globalAttachments, ...physicalAttachments];
         return emailObj;
       });
     }
 
     // 3. Validate Payload (Transform strings to objects first)
-    const validation = batchEmailSchema.safeParse({ 
+    const validation = batchEmailSchema.safeParse({
       emails: emailsData,
       subject: req.body.subject,
       html: req.body.html
     });
-    
+
     if (!validation.success) {
       return res.status(400).json({
         status: 'error',
@@ -138,12 +143,12 @@ const sendBulkEmailsController = async (req, res) => {
 
     // 5. Final check for missing subject/html
     for (let i = 0; i < finalEmails.length; i++) {
-        if (!finalEmails[i].subject) {
-            return res.status(400).json({ status: 'error', message: `Subject missing for email at index ${i}` });
-        }
-        if (!finalEmails[i].html) {
-            return res.status(400).json({ status: 'error', message: `HTML content missing for email at index ${i}` });
-        }
+      if (!finalEmails[i].subject) {
+        return res.status(400).json({ status: 'error', message: `Subject missing for email at index ${i}` });
+      }
+      if (!finalEmails[i].html) {
+        return res.status(400).json({ status: 'error', message: `HTML content missing for email at index ${i}` });
+      }
     }
 
     // 6. Call Service

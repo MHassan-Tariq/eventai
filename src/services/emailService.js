@@ -1,12 +1,14 @@
 const nodemailer = require('nodemailer');
+const axios = require('axios');
 require('dotenv').config();
+const firebaseService = require('./firebaseService');
 
 let transporter;
 
 const getTransporter = () => {
   if (!transporter) {
     const { SMTP_HOST, SMTP_PORT, EMAIL_USER, EMAIL_PASS } = process.env;
-    
+
     if (!EMAIL_USER || !EMAIL_PASS) {
       throw new Error('Missing EMAIL_USER or EMAIL_PASS in environment variables.');
     }
@@ -16,7 +18,7 @@ const getTransporter = () => {
     const config = {
       auth: {
         user: EMAIL_USER.trim(),
-        pass: EMAIL_PASS.trim(), 
+        pass: EMAIL_PASS.trim(),
       },
     };
 
@@ -35,6 +37,24 @@ const getTransporter = () => {
 };
 
 /**
+ * Downloads a file from a URL
+ * @param {string} url 
+ * @returns {Promise<{buffer: Buffer, contentType: string} | null>}
+ */
+const downloadFile = async (url) => {
+  try {
+    const response = await axios.get(url, { responseType: 'arraybuffer', timeout: 10000 });
+    return {
+      buffer: Buffer.from(response.data, 'binary'),
+      contentType: response.headers['content-type']
+    };
+  } catch (error) {
+    console.error(`Failed to download file from URL: ${url}`, error.message);
+    return null;
+  }
+};
+
+/**
  * Sends an email using Nodemailer
  * @param {Object} payload - { to, subject, html, attachments }
  * @returns {Promise<Object>}
@@ -42,21 +62,20 @@ const getTransporter = () => {
 const sendEmail = async ({ to, subject, html, attachments }) => {
   try {
     const mailTransporter = getTransporter();
-    
+
     let finalHtml = html || '';
     const realAttachments = [];
-    const linkAttachments = [];
 
     if (attachments && attachments.length > 0) {
-      attachments.forEach(file => {
-        // 1. Handle Multer file format (Physical files) - Keep as real attachment
+      for (const file of attachments) {
+        // 1. Handle Multer file format (Physical files)
         if (file.originalname && file.buffer) {
           realAttachments.push({
             filename: file.originalname,
             content: file.buffer,
             contentType: file.mimetype
           });
-          return;
+          continue;
         }
 
         // 2. Handle JSON/Object format
@@ -65,14 +84,30 @@ const sendEmail = async ({ to, subject, html, attachments }) => {
 
         // Detect if it's a URL (either in content or path)
         const isUrl = (val) => typeof val === 'string' && (val.startsWith('http://') || val.startsWith('https://'));
-        
-        if (isUrl(content) || isUrl(path)) {
-          linkAttachments.push({
-            name: file.filename || 'Attachment',
-            url: isUrl(path) ? path : content
-          });
+
+        const urlToDownload = isUrl(path) ? path : (isUrl(content) ? content : null);
+
+        if (urlToDownload) {
+          console.log(`Downloading attachment from: ${urlToDownload}`);
+          const downloaded = await downloadFile(urlToDownload);
+
+          if (downloaded) {
+            // Extract filename from URL or use default
+            const urlPath = new URL(urlToDownload).pathname;
+            const filename = file.filename || urlPath.split('/').pop() || 'attachment';
+
+            realAttachments.push({
+              filename: filename,
+              content: downloaded.buffer,
+              contentType: downloaded.contentType || file.contentType
+            });
+          } else {
+            // If download fails, we could fallback to a link, but the user requested physical sending.
+            // For now, we'll just skip it or log it.
+            console.warn(`Skipping attachment ${urlToDownload} due to download failure.`);
+          }
         } else {
-          // It's likely a Base64 string or local path, keep as real attachment
+          // It's likely a Base64 string or local path
           realAttachments.push({
             filename: file.filename,
             content: content,
@@ -80,20 +115,9 @@ const sendEmail = async ({ to, subject, html, attachments }) => {
             contentType: file.contentType
           });
         }
-      });
+      }
     }
 
-    // Append links to HTML body if any
-    if (linkAttachments.length > 0) {
-      let linksHtml = '<div style="margin-top: 20px; padding-top: 10px; border-top: 1px solid #ddd;">';
-      linksHtml += '<strong>Attachments:</strong><ul>';
-      linkAttachments.forEach(link => {
-        linksHtml += `<li><a href="${link.url}">${link.name}</a></li>`;
-      });
-      linksHtml += '</ul></div>';
-      finalHtml += linksHtml;
-    }
-    
     const mailOptions = {
       from: process.env.EMAIL_USER ?? "Zeeshan@solinovation.com",
       to,
@@ -101,13 +125,21 @@ const sendEmail = async ({ to, subject, html, attachments }) => {
       html: finalHtml,
       attachments: realAttachments
     };
-    
+
     const info = await mailTransporter.sendMail(mailOptions);
 
     console.log('Email sent: %s', info.messageId);
+
+    // Log to Firebase (fire and forget)
+    firebaseService.logEmailSent({ to, subject }, 'success', { messageId: info.messageId });
+
     return info;
   } catch (err) {
     console.error('Nodemailer Service Exception:', err);
+
+    // Log error to Firebase
+    firebaseService.logEmailSent({ to, subject }, 'error', { error: err.message });
+
     throw err;
   }
 };

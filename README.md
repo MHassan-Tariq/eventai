@@ -1,13 +1,14 @@
 # Email Sending API
 
-A production-ready REST API endpoint for sending emails securely.
+A production-ready REST API endpoint for sending emails securely, now supporting physical file uploads (PDF, PNG, JPG).
 
 ## Features
 
-- **Nodemailer (SMTP)**: Send emails via any SMTP provider (Gmail, Outlook, SendGrid, etc.).
-- **Zod Validation**: Ensures payloads are correct.
-- **Security**: CORS, Helmet (security headers), and Rate Limiting (5 emails/min).
-- **Clean Architecture**: Controller/Service pattern.
+- **Nodemailer (SMTP)**: Configured for Gmail/SMTP delivery.
+- **Multipart/Form-Data**: Support for physical file uploads via `multer`.
+- **Zod Validation**: Robust payload verification.
+- **Security**: CORS, Helmet (security headers), and Rate Limiting.
+- **Clean Architecture**: Modular Controller/Service/Validator design.
 
 ## Quick Start
 
@@ -18,55 +19,22 @@ A production-ready REST API endpoint for sending emails securely.
    ```
 
 2. **Configure Environment**:
-   - Copy `.env.example` to `.env`.
-   - Update the SMTP settings with your provider's details.
-   - For Gmail, use an [App Password](https://myaccount.google.com/apppasswords).
+   - Create a `.env` file based on `.env.example`.
+   - Use a Gmail **App Password** for `EMAIL_PASS`.
 
-3. **Run the API**:
-   - Development: `npm run dev`
-   - Production: `npm start`
+3. **Run**:
+   - `npm run dev` (Development)
+   - `npm start` (Production)
 
-## API Usage
+## API Documentation
 
-### Endpoint: `POST /api/v1/send-email`
+For full details on endpoint integration, fields, and example code, please refer to:
+👉 **[API_DOCUMENTATION.md](./API_DOCUMENTATION.md)**
 
-**Payload**:
+## GitHub Workflow
 
-```json
-{
-  "to": "recipient@example.com",
-  "subject": "Hello World",
-  "html": "<h1>Welcome</h1><p>This is a test email.</p>"
-}
-```
+This project is hosted at [eventai](https://github.com/MHassan-Tariq/eventai.git).
 
-### Example Frontend Call (Fetch)
+---
 
-```javascript
-const sendEmail = async (data) => {
-  try {
-    const response = await fetch("http://localhost:3000/api/v1/send-email", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        to: data.email,
-        subject: "New Contact Request",
-        html: `<p>You have a new message from ${data.name}</p>`,
-      }),
-    });
-
-    const result = await response.json();
-
-    if (response.ok) {
-      alert("Email sent successfully!");
-    } else {
-      console.error("Failed to send:", result.message);
-    }
-  } catch (error) {
-    console.error("Network error:", error);
-  }
-};
-```
 # eventai

@@ -2,19 +2,33 @@ const admin = require('firebase-admin');
 require('dotenv').config();
 let db;
 let auth;
+
 const initializeFirebase = () => {
     try {
         if (admin.apps.length === 0) {
             let serviceAccount;
             if (process.env.FIREBASE_SERVICE_ACCOUNT_PATH) {
                 serviceAccount = require(process.env.FIREBASE_SERVICE_ACCOUNT_PATH);
-            }
-        
-            else if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY) {
+            } else if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY) {
+                let rawKey = process.env.FIREBASE_PRIVATE_KEY;
+                
+                // Extremely robust PEM reconstruction
+                let b64 = rawKey
+                    .replace('-----BEGIN PRIVATE KEY-----', '')
+                    .replace('-----END PRIVATE KEY-----', '')
+                    .replace(/\\n/g, '') // Remove literal \n sequences
+                    .replace(/[^A-Za-z0-9+/=]/g, ''); // Remove all other non-base64 characters
+
+                let reconstructed = '-----BEGIN PRIVATE KEY-----\n';
+                for (let i = 0; i < b64.length; i += 64) {
+                    reconstructed += b64.substring(i, i + 64) + '\n';
+                }
+                reconstructed += '-----END PRIVATE KEY-----\n';
+
                 serviceAccount = {
-                    projectId: process.env.FIREBASE_PROJECT_ID,
-                    clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-                    privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+                    projectId: process.env.FIREBASE_PROJECT_ID.replace(/"/g, '').trim(),
+                    clientEmail: process.env.FIREBASE_CLIENT_EMAIL.replace(/"/g, '').trim(),
+                    privateKey: reconstructed
                 };
             }
 
@@ -24,7 +38,7 @@ const initializeFirebase = () => {
                 });
                 console.log('Firebase Admin initialized successfully.');
             } else {
-                console.warn('Firebase configuration missing. Skip initialization.');
+                console.warn('Firebase configuration missing. Check your .env file.');
                 return null;
             }
         }
@@ -34,7 +48,7 @@ const initializeFirebase = () => {
 
         return admin.app();
     } catch (error) {
-        console.error('Error initializing Firebase:', error);
+        console.error('Error initializing Firebase:', error.message);
         return null;
     }
 };
@@ -57,6 +71,7 @@ const logEmailSent = async (emailData, status, info = {}) => {
         console.error('Error logging email to Firebase:', error);
     }
 };
+
 module.exports = {
     admin,
     getDb: () => db,

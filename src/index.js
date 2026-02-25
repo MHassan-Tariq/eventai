@@ -5,6 +5,8 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const { sendEmailController, sendBulkEmailsController } = require('./controllers/emailController');
 
+const { getRSVPData, updateRSVP } = require('./controllers/rsvpController');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -13,8 +15,9 @@ app.use(helmet()); // Basic security headers
 
 // CORS configuration - Restrict to specific origin
 const corsOptions = {
-  origin: process.env.ALLOWED_ORIGIN || '*',
-  methods: ['POST'], // Only allow POST for this API
+  origin: '*', // Allow all for development, or specify process.env.ALLOWED_ORIGIN
+  methods: ['GET', 'POST', 'PATCH', 'PUT', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
   optionsSuccessStatus: 200
 };
 app.use(cors(corsOptions));
@@ -44,19 +47,24 @@ const upload = multer({
 });
 
 // 5. Routes
+// Email Routes
 app.post(
   '/api/v1/single-email',
   emailRateLimiter,
-  upload.array('attachments', 5), // Allow up to 5 files with field name 'attachments'
+  upload.array('attachments', 5),
   sendEmailController
 );
 
 app.post(
   '/api/v1/send-email',
   emailRateLimiter,
-  upload.array('attachments', 10), // Allow up to 10 files for bulk sending
+  upload.array('attachments', 10),
   sendBulkEmailsController
 );
+
+// RSVP Routes
+app.get('/api/v1/rsvp-data/:userId/:eventId/:guestId', getRSVPData);
+app.post('/api/v1/rsvp-update/:userId/:eventId/:guestId', updateRSVP);
 
 
 // Health Check

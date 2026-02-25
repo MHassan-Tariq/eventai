@@ -25,13 +25,13 @@ const sendEmailController = async (req, res) => {
     }
 
     // 3. Merge Attachments (Physical files from Multer + URL/Base64 from JSON body)
-    const bodyAttachments = validation.data.attachments || [];
+    const bodyAttachment = validation.data.attachment || [];
     const physicalAttachments = req.files || [];
 
     // 4. Call Service
     const result = await emailService.sendEmail({
       ...validation.data,
-      attachments: [...bodyAttachments, ...physicalAttachments],
+      attachments: [...bodyAttachment, ...physicalAttachments],
     });
 
     // 4. Respond
@@ -73,21 +73,16 @@ const sendBulkEmailsController = async (req, res) => {
       }
     }
 
-    // 2. Map physical files and global attachments to all emails
     const physicalFiles = req.files || [];
-    let globalAttachments = [];
+    let attachmentData = req.body.attachment || req.body.attachments; // Support both for now
 
-    if (typeof req.body.attachments === 'string') {
+    // Parse attachment if it comes as a JSON string
+    if (typeof attachmentData === 'string' && (attachmentData.startsWith('{'))) {
       try {
-        const parsed = JSON.parse(req.body.attachments);
-        globalAttachments = Array.isArray(parsed) ? parsed : [parsed];
+        attachmentData = JSON.parse(attachmentData);
       } catch (e) {
-        globalAttachments = [{ path: req.body.attachments }];
+        // Not JSON, likely a single URL string, let Zod handle it
       }
-    } else if (Array.isArray(req.body.attachments)) {
-      globalAttachments = req.body.attachments;
-    } else if (req.body.attachments && typeof req.body.attachments === 'object') {
-      globalAttachments = [req.body.attachments];
     }
 
     if (Array.isArray(emailsData)) {
@@ -115,6 +110,7 @@ const sendBulkEmailsController = async (req, res) => {
       emails: emailsData,
       subject: req.body.subject,
       html: req.body.html,
+      attachment: attachmentData,
       rsvp_links: rsvpLinks
     });
 
@@ -127,8 +123,9 @@ const sendBulkEmailsController = async (req, res) => {
     }
 
     // 5. Build Final Emails with Attachments and Template Replacements
-    const globalSubject = req.body.subject;
-    const globalHtml = req.body.html;
+    const globalSubject = validation.data.subject;
+    const globalHtml = validation.data.html;
+    const globalAttachment = validation.data.attachment || [];
 
     const finalEmails = validation.data.emails.map(email => {
       // 1. Resolve Subject & HTML
@@ -141,7 +138,7 @@ const sendBulkEmailsController = async (req, res) => {
       }
 
       // 3. Merge Attachments
-      const emailAttachments = [...(email.attachments || []), ...globalAttachments];
+      const emailAttachment = email.attachment || [];
       const physicalAttachments = physicalFiles.map(f => ({
         filename: f.originalname,
         content: f.buffer,
@@ -152,7 +149,7 @@ const sendBulkEmailsController = async (req, res) => {
         ...email,
         subject,
         html,
-        attachments: [...emailAttachments, ...physicalAttachments],
+        attachments: [...emailAttachment, ...globalAttachment, ...physicalAttachments],
       };
     });
 

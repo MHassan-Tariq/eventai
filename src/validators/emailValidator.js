@@ -7,19 +7,20 @@ const emailSchema = z.object({
   ]),
   subject: z.string().max(200).optional(),
   html: z.string().optional(),
-  attachments: z.union([
-    z.string().url(), // Support for a single URL string
-    z.array(z.object({
+  attachment: z.union([
+    z.string().url(),
+    z.object({
       filename: z.string().optional(),
       content: z.any().optional(),
       path: z.string().optional(),
       contentType: z.string().optional()
-    }))
+    })
   ]).optional().transform((val) => {
+    if (!val) return [];
     if (typeof val === 'string') {
       return [{ path: val }];
     }
-    return val;
+    return [val];
   }),
   rsvp_link: z.string().url().optional(),
 });
@@ -38,6 +39,7 @@ const batchEmailSchema = z.object({
   }),
   subject: z.string().max(200).optional(),
   html: z.string().optional(),
+  attachment: emailSchema.shape.attachment,
   rsvp_links: z.array(z.string().url()).optional(),
 });
 
